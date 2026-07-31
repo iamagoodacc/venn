@@ -60,8 +60,8 @@ class Token(BaseModel):
 
 class ProfileCreate(BaseModel):
     """What the client sends to POST /profiles"""
-    name: str | None = None # this pattern means it can be a string or null/missing in that case set to None
-    is_default: bool | None = None
+    name: str
+    is_default: bool = False
 
 class ProfileUpdate(BaseModel):
     """What the client sends to PATCH /profiles/{id} — all fields optional,
@@ -118,10 +118,9 @@ class RecurringOut(BaseModel):
 # Exceptions
  
 class ExceptionBlockIn(BaseModel):
-    """One block within a date's submitted exception set. start_time and
-    end_time both None means "all day"."""
-    start_time: time | None = None
-    end_time: time | None = None
+    """One block within a date's submitted exception set."""
+    start_time: time
+    end_time: time
     status: str = "busy"
     reason: str | None = None
  
@@ -145,8 +144,8 @@ class ExceptionOut(BaseModel):
     """A single stored exception, as returned by the API"""
     id: int
     exception_date: date
-    start_time: time | None # without = None Pydantic requires the field to STILL be present so without that field its invalid
-    end_time: time | None # this schema doesn't have = None because its an output schema all of the data will be given compared to an input schema
+    start_time: time # without = None Pydantic requires the field to STILL be present so without that field its invalid
+    end_time: time # this schema doesn't have = None because its an output schema all of the data will be given compared to an input schema
     status: str
     reason: str | None
  

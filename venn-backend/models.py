@@ -64,8 +64,8 @@ class AvailabilityException(Base):
     id = Column(Integer, primary_key=True, index=True)
     profile_id = Column(Integer, ForeignKey("availability_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     exception_date = Column(Date, nullable=False, index=True)
-    start_time = Column(Time, nullable=True)   # NULL means "all day"
-    end_time = Column(Time, nullable=True)
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
     status = Column(String(10), nullable=False, default="busy")
     reason = Column(String(255), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
@@ -74,11 +74,7 @@ class AvailabilityException(Base):
 
     __table_args__ = (
         CheckConstraint("status IN ('free', 'if_needed', 'busy')", name="ck_exception_status"),
-        CheckConstraint(
-            "(start_time IS NULL AND end_time IS NULL) OR "
-            "(start_time IS NOT NULL AND end_time IS NOT NULL AND end_time > start_time)",
-            name="ck_exception_time_shape",
-        ),
+        CheckConstraint("end_time > start_time", name="ck_exception_time_order"),
     )
 
 
