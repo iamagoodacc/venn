@@ -96,7 +96,7 @@ def local_block_to_utc(block_date: date, start_time: time, end_time: time, tz_na
     end_dt = datetime.combine(block_date, end_time).replace(tzinfo=tz)
     return start_dt.astimezone(timezone.utc), end_dt.astimezone(timezone.utc)
 
-def resolve_participant_utc_availability(participant: models.EventParticipant, start_date: date, end_date: date, db: Session) -> dict[date, list[tuple[datetime, datetime, str]]]:
+def resolve_participant_utc_availability(participant: models.EventParticipant, start_date: date, end_date: date, db: Session) -> list[tuple[datetime, datetime, str]]:
     """Branches on participant.profile_id (call resolve_profile_availability) vs not (call resolve_fresh_availability),
     determines the correct tz_name (profile owner's timezone, or the
     event host's timezone for fresh-paint), then runs every block
@@ -132,10 +132,17 @@ def resolve_participant_utc_availability(participant: models.EventParticipant, s
             # host_timezone = result[0] if result else None
             utc_blocks.append((start_dt, end_dt, status))
 
-def compute_slot_scores(all_participants_utc: list[dict[date, list[tuple[datetime, datetime, str]]]],slot_minutes: int = 30,) -> dict[datetime, dict[str, int]]:
+    return utc_blocks
+
+def compute_slot_scores(all_participants_utc: list[list[tuple[datetime, datetime, str]]], range_start_utc: datetime, range_end_utc: datetime,slot_minutes: int = 30) -> dict[datetime, dict[str, int]]:
     """For each 30-minute slot across the whole range, count how many
     participants are free/if_needed/busy at that slot."""
-    pass
+    slots = []
+
+    current = range_start_utc
+    while current < range_end_utc:
+        slots.append(current)
+        current += timedelta(minutes=slot_minutes) # gives us 30 minute windows
 
 def apply_overlap_mode(slot_scores: dict[datetime, dict[str, int]], total_participants: int, mode: str) -> dict[datetime, dict]:
     if mode == "best-effort":

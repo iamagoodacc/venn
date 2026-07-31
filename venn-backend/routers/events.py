@@ -28,6 +28,8 @@ def create_event(event: schemas.EventCreate, current_user: models.User = Depends
         created_by=current_user.id,
         range_start=event.range_start,
         range_end=event.range_end,
+        window_start_time=event.window_start_time,
+        window_end_time=event.window_end_time,
         invite_code=generate_unique_invite_code(db),
     )
     db.add(new_event)

@@ -158,6 +158,8 @@ class EventCreate(BaseModel):
     name: str
     range_start: date | None = None
     range_end: date | None = None
+    window_start_time: time | None = None
+    window_end_time: time | None = None
 
     @field_validator("range_end")
     @classmethod
@@ -169,6 +171,16 @@ class EventCreate(BaseModel):
             raise ValueError("range_end must be after range_start")
         return value
 
+    @model_validator(mode="after")
+    def window_both_or_neither(self):
+        has_start = self.window_start_time is not None
+        has_end = self.window_end_time is not None
+        if has_start != has_end:
+            raise ValueError("window_start_time and window_end_time must both be set, or both left unset")
+        if has_start and self.window_end_time <= self.window_start_time:
+            raise ValueError("window_end_time must be after window_start_time")
+        return self
+
 class EventOut(BaseModel):
     """Single event returned by the API used to show information of event for joined participants or host"""
     id: int 
@@ -177,6 +189,8 @@ class EventOut(BaseModel):
     range_start: date | None
     range_end: date | None
     invite_code: str
+    window_start_time: time | None
+    window_end_time: time | None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

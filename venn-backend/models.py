@@ -87,6 +87,8 @@ class Event(Base):
     range_start = Column(Date, nullable=True)  # NULL = infer from respondents
     range_end = Column(Date, nullable=True)
     invite_code = Column(String(16), unique=True, nullable=False, index=True)
+    window_start_time = Column(Time, nullable=True)  # NULL = no daily restriction, full day
+    window_end_time = Column(Time, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
     host = relationship("User", back_populates="events_created")
@@ -96,6 +98,11 @@ class Event(Base):
         CheckConstraint(
             "range_start IS NULL OR range_end IS NULL OR range_end >= range_start",
             name="ck_event_date_order",
+        ),
+        CheckConstraint(
+            "(window_start_time IS NULL AND window_end_time IS NULL) OR "
+            "(window_start_time IS NOT NULL AND window_end_time IS NOT NULL AND window_end_time > window_start_time)",
+            name="ck_event_window_shape",
         ),
     )
 
