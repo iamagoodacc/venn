@@ -148,6 +148,13 @@ def join_event_fresh(event_id: int, participant_id: int, submission: schemas.Eve
             if submission.guest_password is None or not auth.verify_password(submission.guest_password, participant.guest_password_hash):
                 raise HTTPException(status_code=401, detail="Incorrect password")
         # if guest_password_hash is None, the entry was left open, no check needed 
+
+    # now that we have a window system for events we need to reject submissions that have blocks outside window (shouldn't happen anyway as frontend will only show table of valid blocks)
+    event = participant.event
+    if event.window_start_time is not None:
+        for block in submission.blocks:
+            if block.start_time < event.window_start_time or block.end_time > event.window_end_time:
+                raise HTTPException(status_code=400, detail=f"Availability must be within {event.window_start_time}-{event.window_end_time}")
     
     # replace-the-set: delete everything currently stored for this participant
     db.query(models.EventParticipantAvailability).filter(
@@ -175,6 +182,9 @@ def join_event_fresh(event_id: int, participant_id: int, submission: schemas.Eve
 
 @router.get("/events/{id}/overlap", response_model=schemas.EventOut)
 def get_event_availability(mode: str, participant_ids: list,invite_code: str, id: int, event: schemas.EventCreate,current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
-    """Get the data for heatmap/overlap, which will pull all participant availability"""
-    # focus on this later as I have to make merge helper
+    """Get the data for heatmap/overlap, which will pull all participant availability
+    Responsible for:
+    Fetching every EventParticipant for the event (optionally filtered by participant_ids)
+    For each one, calling resolve_participant_utc_availability (which itself internally calls resolve_profile_availability/resolve_fresh_availability, then local_block_to_utc)
+    Collecting the results into dict[int, list[tuple[datetime, datetime, str]]] - participant ID mapped to their flat UTC block list"""
     pass

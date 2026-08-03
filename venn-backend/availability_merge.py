@@ -134,15 +134,53 @@ def resolve_participant_utc_availability(participant: models.EventParticipant, s
 
     return utc_blocks
 
-def compute_slot_scores(all_participants_utc: list[list[tuple[datetime, datetime, str]]], range_start_utc: datetime, range_end_utc: datetime,slot_minutes: int = 30) -> dict[datetime, dict[str, int]]:
-    """For each 30-minute slot across the whole range, count how many
-    participants are free/if_needed/busy at that slot."""
-    slots = []
+def get_status_at_slot(slot_start: datetime, blocks: list[tuple[datetime, datetime, str]], slot_minutes: int = 30) -> str:
+    slot_end = slot_start + timedelta(minutes=slot_minutes)
+    for block_start, block_end, status in blocks:
+        if block_start <= slot_start and block_end >= slot_end:
+            return status
+    return "busy"
 
-    current = range_start_utc
-    while current < range_end_utc:
-        slots.append(current)
-        current += timedelta(minutes=slot_minutes) # gives us 30 minute windows
+def compute_slot_scores(
+    all_participants_utc: dict[int, list[tuple[datetime, datetime, str]]],
+    range_start: date,
+    range_end: date,
+    host_timezone: str,
+    window_start_time: time | None,
+    window_end_time: time | None,
+    slot_minutes: int = 30) -> dict[datetime, dict[str, list[int]]]:
+    
+    """Returns, for every slot, the list of participant IDs in each status -
+    e.g. {slot: {"free": [12, 7], "if_needed": [3], "busy": [9]}, ...}.
+    Counts are len() of each list; no filtering happens here - that's a
+    frontend concern, working off this full result."""
+
+    tz = ZoneInfo(host_timezone)
+    day_start_time = window_start_time or time.min # defaulting if null to full day
+    day_end_time = window_end_time or time.max
+
+    all_slots = []
+    current_date = range_start
+    while current_date <= range_end:
+
+        day_start_utc, day_end_utc = local_block_to_utc(current_date, day_start_time, day_end_time, host_timezone) # get dt version which includes window time start and window time end
+        slot = day_start_utc
+
+        while slot < day_end_utc:
+            all_slots.append(slot)
+            slot += timedelta(minutes=slot_minutes) # gets our 30 min slot intervals
+
+        current_date += timedelta(days=1) # gets next day
+
+    scores = {}
+    for slot in all_slots:
+        scores[slot] = {"free": [], "if_needed": [], "busy": []} # initialise template
+        for participant_id, blocks in all_participants_utc.items():
+            status = get_status_at_slot(slot, blocks, slot_minutes)
+            scores[slot][status].append(participant_id)
+
+    return scores
+    
 
 def apply_overlap_mode(slot_scores: dict[datetime, dict[str, int]], total_participants: int, mode: str) -> dict[datetime, dict]:
     if mode == "best-effort":
