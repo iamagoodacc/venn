@@ -11,6 +11,7 @@ import models
 import schemas
 import auth
 import secrets
+import availability_merge
 
 router = APIRouter(tags=["events"])
 
@@ -21,7 +22,7 @@ def generate_unique_invite_code(db: Session) -> str:
         if not exists:
             return code
 
-@router.post("/events", response_model=list[schemas.EventOut])
+@router.post("/events", response_model=schemas.EventOut)
 def create_event(event: schemas.EventCreate, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
     new_event = models.Event(
         name=event.name,
@@ -37,7 +38,7 @@ def create_event(event: schemas.EventCreate, current_user: models.User = Depends
     db.refresh(new_event)
     return new_event
 
-@router.get("/events/mine", response_model=schemas.EventOut)
+@router.get("/events/mine", response_model=list[schemas.EventOut])
 def get_created_events(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
     return db.query(models.Event).filter(models.Event.created_by == current_user.id).all() # list endpoint and returns an empty list if none compared to single item endpoints which return None (causes errors for output schema)
 
@@ -180,11 +181,44 @@ def join_event_fresh(event_id: int, participant_id: int, submission: schemas.Eve
     return new_rows
 
 
-@router.get("/events/{id}/overlap", response_model=schemas.EventOut)
-def get_event_availability(mode: str, participant_ids: list,invite_code: str, id: int, event: schemas.EventCreate,current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+@router.get("/events/{event_id}/overlap", response_model=schemas.OverlapOut)
+def get_event_availability(
+    event_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)):
+    """Computes and returns the full per-slot, per-status participant
+    breakdown for an event, across every participant (profile-based and
+    fresh-paint alike). No mode/participant_ids filtering happens here -
+    that's now a frontend concern, since the full per-participant data is
+    already present in the response and can be filtered/aggregated
+    client-side without another request."""
     """Get the data for heatmap/overlap, which will pull all participant availability
     Responsible for:
     Fetching every EventParticipant for the event (optionally filtered by participant_ids)
     For each one, calling resolve_participant_utc_availability (which itself internally calls resolve_profile_availability/resolve_fresh_availability, then local_block_to_utc)
     Collecting the results into dict[int, list[tuple[datetime, datetime, str]]] - participant ID mapped to their flat UTC block list"""
-    pass
+
+    participant_utcs = {}
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail = "Event does not exist")
+
+    # allow both host and participants to view the availability
+    is_host = event.created_by == current_user.id
+    is_participant = db.query(models.EventParticipant).filter(
+        models.EventParticipant.event_id == event_id,
+        models.EventParticipant.user_id == current_user.id,
+    ).first() is not None
+
+    if not (is_host or is_participant):
+        raise HTTPException(status_code=403, detail="Not authorized to view this event's availability")
+        
+    event_start, event_end = availability_merge.resolve_event_range(event) # get us our event ranges
+    for participant in event.participants:
+        blocks = availability_merge.resolve_participant_utc_availability(participant, event_start, event_end, db)
+        participant_utcs[participant.id] = blocks
+
+    event_availability = availability_merge.compute_slot_scores(participant_utcs, event_start, event_end, event.host.timezone, event.window_start_time, event.window_end_time)
+
+    return {"slots": event_availability} # only one field for now but it allows extension
+

@@ -110,27 +110,30 @@ def resolve_participant_utc_availability(participant: models.EventParticipant, s
         if participant.user_id: # if you have a profile id you are a user but just in case
             user = db.query(models.User).filter(models.User.id == participant.user_id).first()
             # timezone has nullable = False with a default UTC
-
-            for date in availability:
-                start_time, end_time, status = availability[date]
-                start_dt, end_dt = local_block_to_utc(date, start_time, end_time, user.timezone)
-                utc_blocks.append((start_dt, end_dt, status))
+            
+            for block_date, blocks in availability.items():
+                for start_time, end_time, status in blocks:
+                    start_time, end_time, status = availability[date]
+                    start_dt, end_dt = local_block_to_utc(date, start_time, end_time, user.timezone)
+                    utc_blocks.append((start_dt, end_dt, status))
+        else:
+            raise ValueError("Participant has a profile_id but no user_id - data integrity issue")
 
     else:
         availability = resolve_fresh_availability(participant.id, start_date, end_date, db)
 
-        for date in availability:
-            start_time, end_time, status = availability[date]
-            start_dt, end_dt = local_block_to_utc(date, start_time, end_time, participant.event.host.timezone) # this is why SQLAlchemy is so neat, it gives these features to allow such convenience instead of using large join statemetns like:
-            # result = (
-            #     db.query(models.User.timezone)
-            #     .join(models.Event, models.Event.created_by == models.User.id)
-            #     .join(models.EventParticipant, models.EventParticipant.event_id == models.Event.id)
-            #     .filter(models.EventParticipant.id == participant_id)
-            #     .first()
-            # )
-            # host_timezone = result[0] if result else None
-            utc_blocks.append((start_dt, end_dt, status))
+        for block_date, blocks in availability.items():
+            for start_time, end_time, status in blocks:
+                start_dt, end_dt = local_block_to_utc(block_date, start_time, end_time, participant.event.host.timezone) # this is why SQLAlchemy is so neat, it gives these features to allow such convenience instead of using large join statemetns like:
+                # result = (
+                #     db.query(models.User.timezone)
+                #     .join(models.Event, models.Event.created_by == models.User.id)
+                #     .join(models.EventParticipant, models.EventParticipant.event_id == models.Event.id)
+                #     .filter(models.EventParticipant.id == participant_id)
+                #     .first()
+                # )
+                # host_timezone = result[0] if result else None
+                utc_blocks.append((start_dt, end_dt, status))
 
     return utc_blocks
 
@@ -180,10 +183,3 @@ def compute_slot_scores(
             scores[slot][status].append(participant_id)
 
     return scores
-    
-
-def apply_overlap_mode(slot_scores: dict[datetime, dict[str, int]], total_participants: int, mode: str) -> dict[datetime, dict]:
-    if mode == "best-effort":
-        pass
-    elif mode == "all-required":
-        pass

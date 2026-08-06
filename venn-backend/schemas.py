@@ -167,7 +167,7 @@ class EventCreate(BaseModel):
         if value is None:
             return value
         start = info.data.get("range_start")
-        if start is not None and value <= start:
+        if start is not None and value < start:
             raise ValueError("range_end must be after range_start")
         return value
 
@@ -180,6 +180,14 @@ class EventCreate(BaseModel):
         if has_start and self.window_end_time <= self.window_start_time:
             raise ValueError("window_end_time must be after window_start_time")
         return self
+
+    # make sure end/start time of a range is on 30 minute boundary
+    @field_validator("window_start_time", "window_end_time") # checks this for multiple fields as I pass multiple in
+    @classmethod
+    def must_be_half_hour_aligned(cls, value: time | None) -> time | None:
+        if value is not None and value.minute not in (0, 30):
+            raise ValueError("Time must be on a 30-minute boundary (e.g. 9:00 or 9:30)")
+        return value
 
 class EventOut(BaseModel):
     """Single event returned by the API used to show information of event for joined participants or host"""
@@ -292,5 +300,5 @@ class EventPreviewOut(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
-# still need one more schema for overlap but will do that later as I am unsure of what is needed for now
+class OverlapOut(BaseModel):
+    slots: dict[datetime, dict[str, list[int]]]
